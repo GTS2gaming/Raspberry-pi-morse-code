@@ -28,10 +28,9 @@ sudo apt install -y \
 
 # Install Python packages
 echo "Installing Python packages..."
-pip3 install --user \
+pip3 install --break-system-packages --user \
     sense-hat \
     pygame \
-    pynput \
     pyttsx3
 
 # Enable I2C for Sense HAT

@@ -24,26 +24,65 @@ from datetime import datetime
 try:
     from sense_hat import SenseHat
     import pygame
-    import pynput
-    from pynput import mouse
     import pyttsx3
 except ImportError as e:
     print(f"Missing required package: {e}")
-    print("Please run: pip3 install sense-hat pygame pynput pyttsx3")
+    print("Please run: pip3 install sense-hat pygame pyttsx3")
     sys.exit(1)
 
 class MorseCodeSystem:
     def __init__(self):
-        # Initialize Sense HAT
-        self.sense = SenseHat()
-        self.sense.clear()
+        # Initialize Sense HAT with error handling
+        self.sense = None
+        self.sense_available = False
+        try:
+            self.sense = SenseHat()
+            self.sense.clear()
+            self.sense_available = True
+            print("✓ Sense HAT initialized successfully")
+        except Exception as e:
+            print(f"⚠ Sense HAT initialization failed: {e}")
+            print("⚠ Sense HAT display will be disabled, but system will continue")
+            self.sense_available = False
         
-        # Initialize text-to-speech
-        self.tts = pyttsx3.init()
-        self.tts.setProperty('rate', 150)  # Speed of speech
+        # Initialize text-to-speech with error handling
+        self.tts = None
+        self.tts_available = False
+        try:
+            self.tts = pyttsx3.init()
+            # Try to set a working voice
+            voices = self.tts.getProperty('voices')
+            if voices:
+                # Use the first available voice
+                self.tts.setProperty('voice', voices[0].id)
+            self.tts.setProperty('rate', 150)  # Speed of speech
+            self.tts_available = True
+            print("✓ Text-to-speech initialized successfully")
+        except Exception as e:
+            print(f"⚠ Text-to-speech initialization failed: {e}")
+            print("⚠ TTS will be disabled, but system will continue to work")
+            self.tts_available = False
         
-        # Initialize pygame for audio
+        # Initialize pygame for audio and display
+        pygame.init()
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        
+        # Create fullscreen display
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        pygame.display.set_caption("Morse Code System")
+        
+        # Colors for pygame display
+        self.BLACK = (0, 0, 0)
+        self.WHITE = (255, 255, 255)
+        self.GREEN = (0, 255, 0)
+        self.YELLOW = (255, 255, 0)
+        self.RED = (255, 0, 0)
+        self.BLUE = (0, 0, 255)
+        
+        # Font for display
+        self.font_large = pygame.font.Font(None, 72)
+        self.font_medium = pygame.font.Font(None, 48)
+        self.font_small = pygame.font.Font(None, 36)
         
         # Morse code dictionary
         self.morse_dict = {
@@ -81,6 +120,7 @@ class MorseCodeSystem:
         self.is_long_press = False
         self.press_start_time = 0
         self.last_input_time = 0
+        self.character_timeout = 1.5  # 1.5 seconds for character completion
         self.word_timeout = 3.0  # 3 seconds for word separation
         self.long_press_threshold = 0.5  # 500ms for dash
         self.double_click_threshold = 0.5
@@ -96,10 +136,71 @@ class MorseCodeSystem:
         print("Controls:")
         print("- Left click: Dot (.)")
         print("- Left long press (>500ms): Dash (-)")
+        print("- 1.5 second pause: Complete character")
         print("- 3 second pause: Next word")
-        print("- Right click: End message")
+        print("- Right click: Complete message and read aloud")
         print("- Double right click: Reset")
+        print("- ESC key: Exit fullscreen")
         
+        # Initial screen update
+        self.update_display()
+        
+    def speak_with_espeak(self, text):
+        """Fallback TTS using espeak command directly"""
+        try:
+            subprocess.run(['espeak', text], check=False, capture_output=True)
+            print("✓ Message spoken using espeak")
+        except Exception as e:
+            print(f"⚠ Espeak fallback failed: {e}")
+            print("⚠ Audio output not available - message displayed only")
+
+    def update_display(self):
+        """Update the fullscreen display"""
+        self.screen.fill(self.BLACK)
+        
+        # Title
+        title_text = self.font_large.render("Morse Code System", True, self.WHITE)
+        title_rect = title_text.get_rect(center=(self.screen.get_width()//2, 100))
+        self.screen.blit(title_text, title_rect)
+        
+        # Current morse code
+        if self.current_morse:
+            morse_text = self.font_medium.render(f"Current: {self.current_morse}", True, self.YELLOW)
+            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 200))
+            self.screen.blit(morse_text, morse_rect)
+        
+        # Current message
+        if self.current_message:
+            msg_text = self.font_medium.render(f"Message: {self.current_message}", True, self.GREEN)
+            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 300))
+            self.screen.blit(msg_text, msg_rect)
+        
+        # Complete words
+        if self.words:
+            words_text = self.font_small.render(f"Words: {' '.join(self.words)}", True, self.BLUE)
+            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 400))
+            self.screen.blit(words_text, words_rect)
+        
+        # Instructions
+        instructions = [
+            "Left Click: Dot (.)",
+            "Left Long Press: Dash (-)",
+            "1.5s Pause: Complete Character",
+            "3s Pause: Next Word",
+            "Right Click: Complete Message",
+            "Double Right Click: Reset",
+            "ESC: Exit"
+        ]
+        
+        y_offset = self.screen.get_height() - 200
+        for instruction in instructions:
+            inst_text = self.font_small.render(instruction, True, self.WHITE)
+            inst_rect = inst_text.get_rect(center=(self.screen.get_width()//2, y_offset))
+            self.screen.blit(inst_text, inst_rect)
+            y_offset += 30
+        
+        pygame.display.flip()
+
     def play_beep(self, frequency=800, duration=0.1):
         """Play a beep sound"""
         try:
@@ -119,34 +220,47 @@ class MorseCodeSystem:
     
     def display_character(self, char, color='green'):
         """Display a character on the Sense HAT"""
-        self.sense.show_letter(char, text_colour=self.colors[color])
-        time.sleep(1)
+        if self.sense_available:
+            try:
+                self.sense.show_letter(char, text_colour=self.colors[color])
+                time.sleep(1)
+            except Exception as e:
+                print(f"⚠ Sense HAT display error: {e}")
+        else:
+            print(f"Character displayed: {char} (Sense HAT not available)")
     
     def display_morse_pattern(self, morse_code):
         """Display morse code pattern on LED matrix"""
-        self.sense.clear()
-        
-        # Display dots and dashes as patterns
-        row = 3  # Middle row
-        col = 0
-        
-        for symbol in morse_code:
-            if col >= 8:
-                break
-                
-            if symbol == '.':
-                # Single pixel for dot
-                self.sense.set_pixel(col, row, self.colors['yellow'])
-                col += 1
-            elif symbol == '-':
-                # Three pixels for dash
-                for i in range(min(3, 8 - col)):
-                    self.sense.set_pixel(col + i, row, self.colors['orange'])
-                col += 3
+        if not self.sense_available:
+            print(f"Morse pattern: {morse_code} (Sense HAT not available)")
+            return
             
-            col += 1  # Space between symbols
-        
-        time.sleep(0.5)
+        try:
+            self.sense.clear()
+            
+            # Display dots and dashes as patterns
+            row = 3  # Middle row
+            col = 0
+            
+            for symbol in morse_code:
+                if col >= 8:
+                    break
+                    
+                if symbol == '.':
+                    # Single pixel for dot
+                    self.sense.set_pixel(col, row, self.colors['yellow'])
+                    col += 1
+                elif symbol == '-':
+                    # Three pixels for dash
+                    for i in range(min(3, 8 - col)):
+                        self.sense.set_pixel(col + i, row, self.colors['orange'])
+                    col += 3
+                
+                col += 1  # Space between symbols
+            
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"⚠ Sense HAT pattern display error: {e}")
     
     def process_morse_character(self):
         """Convert current morse code to character and display it"""
@@ -171,6 +285,9 @@ class MorseCodeSystem:
         
         # Clear current morse
         self.current_morse = ""
+        
+        # Update display
+        self.update_display()
     
     def process_word_break(self):
         """Process word break (3 second pause)"""
@@ -179,13 +296,20 @@ class MorseCodeSystem:
             print(f"Word completed: '{self.current_message}'")
             
             # Display word completion
-            self.sense.show_message(
-                f"WORD: {self.current_message}",
-                text_colour=self.colors['blue'],
-                scroll_speed=0.08
-            )
+            if self.sense_available:
+                try:
+                    self.sense.show_message(
+                        f"WORD: {self.current_message}",
+                        text_colour=self.colors['blue'],
+                        scroll_speed=0.08
+                    )
+                except Exception as e:
+                    print(f"⚠ Sense HAT word display error: {e}")
             
             self.current_message = ""
+            
+            # Update display
+            self.update_display()
     
     def complete_message(self):
         """Complete the entire message"""
@@ -206,19 +330,30 @@ class MorseCodeSystem:
         print(f"\nComplete message: '{complete_msg}'")
         
         # Display complete message on Sense HAT
-        self.sense.show_message(
-            f"MSG: {complete_msg}",
-            text_colour=self.colors['green'],
-            back_colour=self.colors['black'],
-            scroll_speed=0.1
-        )
+        if self.sense_available:
+            try:
+                self.sense.show_message(
+                    f"MSG: {complete_msg}",
+                    text_colour=self.colors['green'],
+                    back_colour=self.colors['black'],
+                    scroll_speed=0.1
+                )
+            except Exception as e:
+                print(f"⚠ Sense HAT message display error: {e}")
         
         # Read out the message
-        try:
-            self.tts.say(f"Message complete: {complete_msg}")
-            self.tts.runAndWait()
-        except Exception as e:
-            print(f"TTS error: {e}")
+        if self.tts_available:
+            try:
+                self.tts.say(f"Message complete: {complete_msg}")
+                self.tts.runAndWait()
+                print("✓ Message read aloud")
+            except Exception as e:
+                print(f"⚠ TTS playback failed: {e}")
+                # Try fallback espeak command
+                self.speak_with_espeak(f"Message complete: {complete_msg}")
+        else:
+            # Try fallback espeak command
+            self.speak_with_espeak(f"Message complete: {complete_msg}")
         
         # Play completion sound
         for _ in range(3):
@@ -234,28 +369,37 @@ class MorseCodeSystem:
         self.words = []
         
         # Clear display
-        self.sense.clear()
-        
-        # Show ready indicator
-        self.sense.show_message(
-            "READY",
-            text_colour=self.colors['white'],
-            scroll_speed=0.1
-        )
+        if self.sense_available:
+            try:
+                self.sense.clear()
+                
+                # Show ready indicator
+                self.sense.show_message(
+                    "READY",
+                    text_colour=self.colors['white'],
+                    scroll_speed=0.1
+                )
+            except Exception as e:
+                print(f"⚠ Sense HAT reset display error: {e}")
         
         # Play reset sound
         self.play_beep(frequency=600, duration=0.3)
+        
+        # Update display
+        self.update_display()
     
-    def on_click(self, x, y, button, pressed):
-        """Handle mouse click events"""
+    def handle_mouse_event(self, event):
+        """Handle pygame mouse events"""
         current_time = time.time()
         
-        if button == mouse.Button.left:
-            if pressed:
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left button
                 # Start of press
                 self.press_start_time = current_time
                 self.is_long_press = False
-            else:
+                
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:  # Left button
                 # End of press
                 press_duration = current_time - self.press_start_time
                 
@@ -275,23 +419,26 @@ class MorseCodeSystem:
                 
                 # Update last input time
                 self.last_input_time = current_time
-        
-        elif button == mouse.Button.right and pressed:
-            # Handle right click for message completion or reset
-            time_since_last = current_time - self.last_right_click_time
-            
-            if time_since_last <= self.double_click_threshold:
-                # Double right click = reset
-                self.right_click_count += 1
-                if self.right_click_count >= 2:
-                    self.reset_system()
-                    self.right_click_count = 0
-            else:
-                # Single right click = complete message
-                self.right_click_count = 1
-                threading.Timer(self.double_click_threshold + 0.1, self.handle_single_right_click).start()
-            
-            self.last_right_click_time = current_time
+                
+                # Update display
+                self.update_display()
+                
+            elif event.button == 3:  # Right button
+                # Handle right click for message completion or reset
+                time_since_last = current_time - self.last_right_click_time
+                
+                if time_since_last <= self.double_click_threshold:
+                    # Double right click = reset
+                    self.right_click_count += 1
+                    if self.right_click_count >= 2:
+                        self.reset_system()
+                        self.right_click_count = 0
+                else:
+                    # Single right click = complete message
+                    self.right_click_count = 1
+                    threading.Timer(self.double_click_threshold + 0.1, self.handle_single_right_click).start()
+                
+                self.last_right_click_time = current_time
     
     def handle_single_right_click(self):
         """Handle single right click after timeout"""
@@ -300,23 +447,32 @@ class MorseCodeSystem:
             self.right_click_count = 0
     
     def timeout_monitor(self):
-        """Monitor for timeouts (word breaks)"""
+        """Monitor for timeouts (character completion and word breaks)"""
         while self.running:
             current_time = time.time()
             
-            # Check for word timeout
-            if (self.last_input_time > 0 and 
-                current_time - self.last_input_time >= self.word_timeout and
-                self.current_morse):
+            if self.last_input_time > 0:
+                time_since_input = current_time - self.last_input_time
                 
-                # Process current character
-                self.process_morse_character()
+                # Check for character timeout (1.5 seconds)
+                if (time_since_input >= self.character_timeout and 
+                    self.current_morse and 
+                    time_since_input < self.word_timeout):
+                    
+                    print(f"Character timeout reached - processing: {self.current_morse}")
+                    # Process current character
+                    self.process_morse_character()
                 
-                # Process word break
-                self.process_word_break()
-                
-                # Reset timeout
-                self.last_input_time = 0
+                # Check for word timeout (3 seconds)
+                elif (time_since_input >= self.word_timeout and 
+                      self.current_message):
+                    
+                    print(f"Word timeout reached - completing word: {self.current_message}")
+                    # Process word break
+                    self.process_word_break()
+                    
+                    # Reset timeout
+                    self.last_input_time = 0
             
             time.sleep(0.1)
     
@@ -325,30 +481,57 @@ class MorseCodeSystem:
         print("Starting Morse Code System...")
         
         # Show startup message
-        self.sense.show_message(
-            "MORSE READY",
-            text_colour=self.colors['green'],
-            scroll_speed=0.1
-        )
+        if self.sense_available:
+            try:
+                self.sense.show_message(
+                    "MORSE READY",
+                    text_colour=self.colors['green'],
+                    scroll_speed=0.1
+                )
+            except Exception as e:
+                print(f"⚠ Sense HAT startup display error: {e}")
         
         # Start timeout monitor thread
         self.timeout_thread = threading.Thread(target=self.timeout_monitor, daemon=True)
         self.timeout_thread.start()
         
-        # Start mouse listener
+        # Main pygame event loop
+        clock = pygame.time.Clock()
+        
         try:
-            with mouse.Listener(on_click=self.on_click) as listener:
-                print("Mouse listener started. System ready!")
-                listener.join()
+            print("Fullscreen application started. System ready!")
+            print("Press ESC to exit fullscreen mode")
+            
+            while self.running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            self.running = False
+                    elif event.type in [pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP]:
+                        self.handle_mouse_event(event)
+                
+                # Update display
+                self.update_display()
+                clock.tick(60)  # 60 FPS
+                
         except Exception as e:
-            print(f"Mouse listener error: {e}")
+            print(f"Event loop error: {e}")
+        finally:
+            self.stop()
     
     def stop(self):
         """Stop the system"""
         print("Stopping Morse Code System...")
         self.running = False
-        self.sense.clear()
+        if self.sense_available:
+            try:
+                self.sense.clear()
+            except Exception as e:
+                print(f"⚠ Sense HAT cleanup error: {e}")
         pygame.mixer.quit()
+        pygame.quit()
 
 def create_systemd_service():
     """Create systemd service for auto-start at boot"""

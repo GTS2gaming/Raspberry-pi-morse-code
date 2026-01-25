@@ -1,0 +1,18 @@
+[Unit]
+Description=Morse Code Sense HAT System
+After=multi-user.target graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=gt
+Group=gt
+WorkingDirectory=/home/gt/Desktop/morse
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/gt/.Xauthority
+ExecStart=/home/gt/Desktop/morse/morse_autostart.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

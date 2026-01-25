@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Morse Code System
+Comment=Auto-start Morse Code System at login
+Exec=/home/gt/Desktop/morse/morse_autostart.sh
+Icon=input-keyboard
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+StartupNotify=false
+Terminal=false

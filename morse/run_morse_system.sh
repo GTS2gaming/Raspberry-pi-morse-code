@@ -1,0 +1,35 @@
+#!/bin/bash
+
+echo "=== Morse Code System Launcher ==="
+echo ""
+echo "This will start the Morse Code System in fullscreen mode."
+echo ""
+echo "Controls:"
+echo "- Left Click: Dot (.)"
+echo "- Left Long Press (>500ms): Dash (-)"
+echo "- 3 second pause: Next word"
+echo "- Right Click: Complete message and read aloud"
+echo "- Double Right Click: Reset for new message"
+echo "- ESC Key: Exit fullscreen"
+echo ""
+echo "System Features:"
+echo "✓ Robust error handling - works even without Sense HAT"
+echo "✓ Fallback TTS using espeak if pyttsx3 fails"
+echo "✓ Fullscreen interface for reliable mouse input"
+echo "✓ Real-time visual feedback on screen"
+echo ""
+echo "Hardware Requirements (optional):"
+echo "- Sense HAT (for LED display) - system works without it"
+echo "- Audio output (for beeps and speech) - system works without it"
+echo "- Display (for fullscreen interface) - required"
+echo ""
+
+read -p "Press Enter to start the Morse Code System, or Ctrl+C to cancel..."
+
+echo ""
+echo "Starting Morse Code System..."
+echo "The application will open in fullscreen mode."
+echo "Any hardware issues will be handled gracefully."
+echo ""
+
+python3 morse_code_sense_hat.py
