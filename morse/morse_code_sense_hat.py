@@ -134,8 +134,8 @@ class MorseCodeSystem:
         self.is_long_press = False
         self.press_start_time = 0
         self.last_input_time = 0
-        self.character_timeout = 2.5  # 2.5 seconds for character completion
-        self.word_timeout = 5.0  # 5.0 seconds for word separation
+        self.character_timeout = 1.5  # 1.5 seconds for character completion
+        self.word_timeout = 3.0  # 3.0 seconds for word separation
         self.long_press_threshold = 0.2  # 200ms for dash
         self.double_click_threshold = 0.5
         self.last_right_click_time = 0
@@ -152,8 +152,8 @@ class MorseCodeSystem:
         print("Controls:")
         print("- Left click: Dot (.)")
         print("- Left long press (>200ms): Dash (-)")
-        print("- 2.5 second pause: Complete character")
-        print("- 5 second pause: Next word")
+        print("- 1.5 second pause: Complete character")
+        print("- 3 second pause: Next word")
         print("- Right click: Complete message and read aloud")
         print("- Double right click: Reset")
         print("- ESC key: Exit fullscreen")
@@ -256,8 +256,8 @@ class MorseCodeSystem:
         instructions = [
             "Left Click: Dot (.)",
             "Left Long Press: Dash (-)",
-            "2.5s Pause: Complete Character",
-            "5s Pause: Next Word",
+            "1.5s Pause: Complete Character",
+            "3s Pause: Next Word",
             "Right Click: Complete Message",
             "Double Right Click: Reset",
             "ESC: Exit"
