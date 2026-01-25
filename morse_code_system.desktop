@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Morse Code System
+Comment=Morse Code Input with Sense HAT
+Exec=python3 /home/gt/Desktop/morse/morse_code_sense_hat.py
+Icon=input-keyboard
+Terminal=true
+Categories=Utility;
