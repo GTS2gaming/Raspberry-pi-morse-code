@@ -191,68 +191,27 @@ class MorseCodeSystem:
         title_rect = title_text.get_rect(center=(self.screen.get_width()//2, 80))
         self.screen.blit(title_text, title_rect)
         
-        # Current morse code
+        # Current morse code - larger font
         if self.current_morse:
-            morse_text = self.font_medium.render(f"Current: {self.current_morse}", True, self.YELLOW)
-            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 150))
+            morse_font = pygame.font.Font(None, 120)
+            morse_text = morse_font.render(f"{self.current_morse}", True, self.YELLOW)
+            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 180))
             self.screen.blit(morse_text, morse_rect)
         
-        # Current message
+        # Current message - larger font
         if self.current_message:
-            msg_text = self.font_medium.render(f"Message: {self.current_message}", True, self.GREEN)
-            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 200))
+            msg_font = pygame.font.Font(None, 96)
+            msg_text = msg_font.render(f"{self.current_message}", True, self.GREEN)
+            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 280))
             self.screen.blit(msg_text, msg_rect)
         
         # Complete words
         if self.words:
-            words_text = self.font_small.render(f"Words: {' '.join(self.words)}", True, self.BLUE)
-            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 250))
+            words_text = self.font_medium.render(f"Words: {' '.join(self.words)}", True, self.BLUE)
+            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 360))
             self.screen.blit(words_text, words_rect)
         
-        # TIMER DEBUG INFORMATION
-        current_time = time.time()
-        
-        # Time since last input
-        if self.last_input_time > 0:
-            time_since_input = current_time - self.last_input_time
-            timer_color = self.RED if time_since_input > self.character_timeout else self.YELLOW
-            timer_text = self.font_small.render(f"Time since input: {time_since_input:.1f}s", True, timer_color)
-            timer_rect = timer_text.get_rect(center=(self.screen.get_width()//2, 300))
-            self.screen.blit(timer_text, timer_rect)
-            
-            # Character timeout countdown
-            char_remaining = self.character_timeout - time_since_input
-            if char_remaining > 0 and self.current_morse:
-                char_color = self.RED if char_remaining < 1.0 else self.YELLOW
-                char_text = self.font_small.render(f"Character timeout in: {char_remaining:.1f}s", True, char_color)
-                char_rect = char_text.get_rect(center=(self.screen.get_width()//2, 330))
-                self.screen.blit(char_text, char_rect)
-            
-            # Word timeout countdown
-            word_remaining = self.word_timeout - time_since_input
-            if word_remaining > 0 and self.current_message and not self.current_morse:
-                word_color = self.RED if word_remaining < 1.0 else self.BLUE
-                word_text = self.font_small.render(f"Word timeout in: {word_remaining:.1f}s", True, word_color)
-                word_rect = word_text.get_rect(center=(self.screen.get_width()//2, 360))
-                self.screen.blit(word_text, word_rect)
-        else:
-            no_timer_text = self.font_small.render("No active timer", True, self.WHITE)
-            no_timer_rect = no_timer_text.get_rect(center=(self.screen.get_width()//2, 300))
-            self.screen.blit(no_timer_text, no_timer_rect)
-        
-        # Processing status
-        if self.processing_character:
-            proc_text = self.font_small.render("PROCESSING CHARACTER...", True, self.RED)
-            proc_rect = proc_text.get_rect(center=(self.screen.get_width()//2, 390))
-            self.screen.blit(proc_text, proc_rect)
-        
-        # Timer configuration display
-        config_y = 420
-        config_text = self.font_small.render(f"Config: Char={self.character_timeout}s, Word={self.word_timeout}s", True, self.WHITE)
-        config_rect = config_text.get_rect(center=(self.screen.get_width()//2, config_y))
-        self.screen.blit(config_text, config_rect)
-        
-        # Instructions (moved down)
+        # Instructions
         instructions = [
             "Left Click: Dot (.)",
             "Left Long Press: Dash (-)",
