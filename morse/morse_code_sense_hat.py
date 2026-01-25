@@ -136,7 +136,7 @@ class MorseCodeSystem:
         self.last_input_time = 0
         self.character_timeout = 2.5  # 2.5 seconds for character completion
         self.word_timeout = 5.0  # 5.0 seconds for word separation
-        self.long_press_threshold = 0.5  # 500ms for dash
+        self.long_press_threshold = 0.2  # 200ms for dash
         self.double_click_threshold = 0.5
         self.last_right_click_time = 0
         self.right_click_count = 0
@@ -146,11 +146,12 @@ class MorseCodeSystem:
         self.running = True
         self.input_thread = None
         self.timeout_thread = None
+        self.input_lock = threading.Lock()  # Lock to prevent race conditions
         
         print("Morse Code System initialized!")
         print("Controls:")
         print("- Left click: Dot (.)")
-        print("- Left long press (>500ms): Dash (-)")
+        print("- Left long press (>200ms): Dash (-)")
         print("- 2.5 second pause: Complete character")
         print("- 5 second pause: Next word")
         print("- Right click: Complete message and read aloud")
@@ -394,8 +395,9 @@ class MorseCodeSystem:
         self.current_message += char
         print(f"Current message: '{self.current_message}'")
         
-        # DON'T reset last_input_time here - keep it for word timeout
-        # The word timeout will handle resetting when appropriate
+        # Reset last_input_time to current time so the next character's timeout starts fresh
+        # This prevents premature timeouts on subsequent characters
+        self.last_input_time = time.time()
         
         # Update display
         self.update_display()
@@ -516,25 +518,27 @@ class MorseCodeSystem:
                 
                 print(f"DEBUG: Mouse button UP detected, press duration: {press_duration:.2f}s")
                 
-                if press_duration >= self.long_press_threshold:
-                    # Long press = dash
-                    self.current_morse += "-"
-                    print(f"Dash (-) after {press_duration:.2f}s press - Current: {self.current_morse}")
-                    self.play_beep(frequency=600, duration=0.3)
-                else:
-                    # Short press = dot
-                    self.current_morse += "."
-                    print(f"Dot (.) after {press_duration:.2f}s press - Current: {self.current_morse}")
-                    self.play_beep(frequency=800, duration=0.1)
+                # Use lock to prevent race condition with timeout monitor
+                with self.input_lock:
+                    if press_duration >= self.long_press_threshold:
+                        # Long press = dash
+                        self.current_morse += "-"
+                        print(f"Dash (-) after {press_duration:.2f}s press - Current: {self.current_morse}")
+                        self.play_beep(frequency=600, duration=0.3)
+                    else:
+                        # Short press = dot
+                        self.current_morse += "."
+                        print(f"Dot (.) after {press_duration:.2f}s press - Current: {self.current_morse}")
+                        self.play_beep(frequency=800, duration=0.1)
+                    
+                    # Update last input time to NOW (when button was released)
+                    # This starts the character timeout from the button release, not press
+                    old_time = self.last_input_time
+                    self.last_input_time = current_time
+                    print(f"DEBUG: Input timing reset from {old_time} to {current_time}, character timeout will start from button release")
                 
                 # Display current morse pattern
                 self.display_morse_pattern(self.current_morse)
-                
-                # Update last input time to NOW (when button was released)
-                # This starts the character timeout from the button release, not press
-                old_time = self.last_input_time
-                self.last_input_time = current_time
-                print(f"DEBUG: Input timing reset from {old_time} to {current_time}, character timeout will start from button release")
                 
                 # Update display
                 self.update_display()
@@ -570,16 +574,24 @@ class MorseCodeSystem:
             if self.last_input_time > 0 and not self.processing_character:
                 time_since_input = current_time - self.last_input_time
                 
-                # Check for character timeout - simple logic without debounce
+                # Check for character timeout
+                # Only process if we have morse code AND enough time has passed
                 if (time_since_input >= self.character_timeout and 
                     self.current_morse and 
                     time_since_input < self.word_timeout):
                     
-                    print(f"DEBUG: Character timeout triggered - time_since_input={time_since_input:.1f}s, current_morse='{self.current_morse}'")
-                    # Set flag to prevent duplicate processing
-                    self.processing_character = True
-                    self.process_morse_character()
-                    self.processing_character = False
+                    # Use lock to safely check and process
+                    with self.input_lock:
+                        # Re-check conditions after acquiring lock
+                        time_since_input = time.time() - self.last_input_time
+                        if (time_since_input >= self.character_timeout and 
+                            self.current_morse and 
+                            time_since_input < self.word_timeout):
+                            
+                            print(f"DEBUG: Character timeout triggered - time_since_input={time_since_input:.1f}s, current_morse='{self.current_morse}'")
+                            self.processing_character = True
+                            self.process_morse_character()
+                            self.processing_character = False
                 
                 # Check for word timeout - only if we have a current message and no pending morse
                 elif (time_since_input >= self.word_timeout and 
