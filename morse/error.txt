@@ -1,44 +1,76 @@
-
-Press Enter to start the Morse Code System, or Ctrl+C to cancel...
-
-Starting Morse Code System...
-The application will open in fullscreen mode.
-
+gt@gt:~/Desktop/morse $ ./morse_autostart.sh 
 pygame 2.6.1 (SDL 2.32.4, Python 3.13.5)
 Hello from the pygame community. https://www.pygame.org/contribute.html
+✓ Sense HAT initialized successfully
+⚠ Text-to-speech initialization failed: SetVoiceByName failed with unknown return code -1 for voice: gmw/en
+⚠ TTS will be disabled, but system will continue to work
+Morse Code System initialized!
+Controls:
+- Left click: Dot (.)
+- Left long press (>500ms): Dash (-)
+- 1.5 second pause: Complete character
+- 3 second pause: Next word
+- Right click: Complete message and read aloud
+- Double right click: Reset
+- ESC key: Exit fullscreen
+Starting Morse Code System...
+Fullscreen application started. System ready!
+Press ESC to exit fullscreen mode
+Dot (.) - Current: .
+Audio error: module 'pygame' has no attribute 'array'
+Character timeout reached - processing: .
+Morse: . -> Character: E
+Dash (-) - Current: .-
+Audio error: module 'pygame' has no attribute 'array'
+Audio error: module 'pygame' has no attribute 'array'
+Exception in thread Thread-1 (timeout_monitor):
 Traceback (most recent call last):
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/__init__.py", line 22, in init
-    eng = _activeEngines[driverName]
-          ~~~~~~~~~~~~~~^^^^^^^^^^^^
-  File "/usr/lib/python3.13/weakref.py", line 136, in __getitem__
-    o = self.data[key]()
-        ~~~~~~~~~^^^^^
-KeyError: None
-
-During handling of the above exception, another exception occurred:
-
+  File "/usr/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+    ~~~~~~~~^^
+  File "/usr/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 467, in timeout_monitor
+    self.process_morse_character()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 293, in process_morse_character
+    self.update_display()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 202, in update_display
+    pygame.display.flip()
+    ~~~~~~~~~~~~~~~~~~~^^
+pygame.error: Could not make GL context current: BadAccess (attempt to access private resource denied)
+Dot (.) - Current: .
+Audio error: module 'pygame' has no attribute 'array'
+Dash (-) - Current: .-
+Audio error: module 'pygame' has no attribute 'array'
+Dot (.) - Current: .-.
+Audio error: module 'pygame' has no attribute 'array'
+Morse: .-. -> Character: R
+Audio error: module 'pygame' has no attribute 'array'
+Exception in thread Thread-2:
 Traceback (most recent call last):
-  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 509, in <module>
-    main()
-    ~~~~^^
-  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 497, in main
-    morse_system = MorseCodeSystem()
-  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 40, in __init__
-    self.tts = pyttsx3.init()
-               ~~~~~~~~~~~~^^
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/__init__.py", line 24, in init
-    eng = Engine(driverName, debug)
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/engine.py", line 59, in __init__
-    self.proxy = driver.DriverProxy(weakref.proxy(self), self.driver_name, debug)
-                 ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/driver.py", line 43, in __init__
-    self._driver = self._module.buildDriver(weakref.proxy(self))
-                   ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/drivers/espeak.py", line 20, in buildDriver
-    return EspeakDriver(proxy)
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/drivers/espeak.py", line 54, in __init__
-    self.setProperty("voice", EspeakDriver._defaultVoice)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/gt/.local/lib/python3.13/site-packages/pyttsx3/drivers/espeak.py", line 135, in setProperty
-    raise ValueError(msg)
-ValueError: SetVoiceByName failed with unknown return code -1 for voice: gmw/en
+  File "/usr/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+    ~~~~~~~~^^
+  File "/usr/lib/python3.13/threading.py", line 1344, in run
+    self.function(*self.args, **self.kwargs)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 449, in handle_single_right_click
+    self.complete_message()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 321, in complete_message
+    self.process_morse_character()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 293, in process_morse_character
+    self.update_display()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/gt/Desktop/morse/morse_code_sense_hat.py", line 202, in update_display
+    pygame.display.flip()
+    ~~~~~~~~~~~~~~~~~~~^^
+pygame.error: Could not make GL context current: BadAccess (attempt to access private resource denied)
+Stopping Morse Code System...
+gt@gt:~/Desktop/morse $ ^C
+gt@gt:~/Desktop/morse $ 
+

@@ -286,6 +286,9 @@ class MorseCodeSystem:
         # Clear current morse
         self.current_morse = ""
         
+        # Keep last_input_time for word timeout, but mark character as processed
+        # Don't reset last_input_time here - let word timeout handle it
+        
         # Update display
         self.update_display()
     
@@ -454,18 +457,19 @@ class MorseCodeSystem:
             if self.last_input_time > 0:
                 time_since_input = current_time - self.last_input_time
                 
-                # Check for character timeout (1.5 seconds)
+                # Check for character timeout (1.5 seconds) - only if we have morse input
                 if (time_since_input >= self.character_timeout and 
                     self.current_morse and 
                     time_since_input < self.word_timeout):
                     
                     print(f"Character timeout reached - processing: {self.current_morse}")
-                    # Process current character
+                    # Process current character (this will reset last_input_time)
                     self.process_morse_character()
                 
-                # Check for word timeout (3 seconds)
+                # Check for word timeout (3 seconds) - only if we have a current message
                 elif (time_since_input >= self.word_timeout and 
-                      self.current_message):
+                      self.current_message and
+                      not self.current_morse):  # Only if no pending morse character
                     
                     print(f"Word timeout reached - completing word: {self.current_message}")
                     # Process word break
