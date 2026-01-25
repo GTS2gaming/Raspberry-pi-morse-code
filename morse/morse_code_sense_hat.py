@@ -50,12 +50,26 @@ class MorseCodeSystem:
         self.tts_available = False
         try:
             self.tts = pyttsx3.init()
-            # Try to set a working voice
+            # Try to set a working voice with better error handling
             voices = self.tts.getProperty('voices')
             if voices:
-                # Use the first available voice
-                self.tts.setProperty('voice', voices[0].id)
+                # Try to find an English voice
+                english_voice = None
+                for voice in voices:
+                    if 'en' in voice.id.lower() or 'english' in voice.name.lower():
+                        english_voice = voice
+                        break
+                
+                if english_voice:
+                    self.tts.setProperty('voice', english_voice.id)
+                else:
+                    # Use first available voice
+                    self.tts.setProperty('voice', voices[0].id)
+            
+            # Set speech properties
             self.tts.setProperty('rate', 150)  # Speed of speech
+            self.tts.setProperty('volume', 0.8)  # Volume level
+            
             self.tts_available = True
             print("✓ Text-to-speech initialized successfully")
         except Exception as e:
@@ -120,12 +134,13 @@ class MorseCodeSystem:
         self.is_long_press = False
         self.press_start_time = 0
         self.last_input_time = 0
-        self.character_timeout = 1.5  # 1.5 seconds for character completion
-        self.word_timeout = 3.0  # 3 seconds for word separation
+        self.character_timeout = 2.5  # 2.5 seconds for character completion
+        self.word_timeout = 5.0  # 5.0 seconds for word separation
         self.long_press_threshold = 0.5  # 500ms for dash
         self.double_click_threshold = 0.5
         self.last_right_click_time = 0
         self.right_click_count = 0
+        self.processing_character = False  # Flag to prevent duplicate processing
         
         # Threading
         self.running = True
@@ -136,8 +151,8 @@ class MorseCodeSystem:
         print("Controls:")
         print("- Left click: Dot (.)")
         print("- Left long press (>500ms): Dash (-)")
-        print("- 1.5 second pause: Complete character")
-        print("- 3 second pause: Next word")
+        print("- 2.5 second pause: Complete character")
+        print("- 5 second pause: Next word")
         print("- Right click: Complete message and read aloud")
         print("- Double right click: Reset")
         print("- ESC key: Exit fullscreen")
@@ -155,75 +170,163 @@ class MorseCodeSystem:
             print("⚠ Audio output not available - message displayed only")
 
     def update_display(self):
-        """Update the fullscreen display"""
+        """Update the fullscreen display - thread safe"""
+        try:
+            # Only update display from main thread
+            if threading.current_thread() is threading.main_thread():
+                self._do_display_update()
+            else:
+                # Schedule display update for main thread
+                pass  # Display will be updated in main loop
+        except Exception as e:
+            print(f"Display update error: {e}")
+    
+    def _do_display_update(self):
+        """Internal display update method"""
         self.screen.fill(self.BLACK)
         
         # Title
         title_text = self.font_large.render("Morse Code System", True, self.WHITE)
-        title_rect = title_text.get_rect(center=(self.screen.get_width()//2, 100))
+        title_rect = title_text.get_rect(center=(self.screen.get_width()//2, 80))
         self.screen.blit(title_text, title_rect)
         
         # Current morse code
         if self.current_morse:
             morse_text = self.font_medium.render(f"Current: {self.current_morse}", True, self.YELLOW)
-            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 200))
+            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 150))
             self.screen.blit(morse_text, morse_rect)
         
         # Current message
         if self.current_message:
             msg_text = self.font_medium.render(f"Message: {self.current_message}", True, self.GREEN)
-            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 300))
+            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 200))
             self.screen.blit(msg_text, msg_rect)
         
         # Complete words
         if self.words:
             words_text = self.font_small.render(f"Words: {' '.join(self.words)}", True, self.BLUE)
-            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 400))
+            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 250))
             self.screen.blit(words_text, words_rect)
         
-        # Instructions
+        # TIMER DEBUG INFORMATION
+        current_time = time.time()
+        
+        # Time since last input
+        if self.last_input_time > 0:
+            time_since_input = current_time - self.last_input_time
+            timer_color = self.RED if time_since_input > self.character_timeout else self.YELLOW
+            timer_text = self.font_small.render(f"Time since input: {time_since_input:.1f}s", True, timer_color)
+            timer_rect = timer_text.get_rect(center=(self.screen.get_width()//2, 300))
+            self.screen.blit(timer_text, timer_rect)
+            
+            # Character timeout countdown
+            char_remaining = self.character_timeout - time_since_input
+            if char_remaining > 0 and self.current_morse:
+                char_color = self.RED if char_remaining < 1.0 else self.YELLOW
+                char_text = self.font_small.render(f"Character timeout in: {char_remaining:.1f}s", True, char_color)
+                char_rect = char_text.get_rect(center=(self.screen.get_width()//2, 330))
+                self.screen.blit(char_text, char_rect)
+            
+            # Word timeout countdown
+            word_remaining = self.word_timeout - time_since_input
+            if word_remaining > 0 and self.current_message and not self.current_morse:
+                word_color = self.RED if word_remaining < 1.0 else self.BLUE
+                word_text = self.font_small.render(f"Word timeout in: {word_remaining:.1f}s", True, word_color)
+                word_rect = word_text.get_rect(center=(self.screen.get_width()//2, 360))
+                self.screen.blit(word_text, word_rect)
+        else:
+            no_timer_text = self.font_small.render("No active timer", True, self.WHITE)
+            no_timer_rect = no_timer_text.get_rect(center=(self.screen.get_width()//2, 300))
+            self.screen.blit(no_timer_text, no_timer_rect)
+        
+        # Processing status
+        if self.processing_character:
+            proc_text = self.font_small.render("PROCESSING CHARACTER...", True, self.RED)
+            proc_rect = proc_text.get_rect(center=(self.screen.get_width()//2, 390))
+            self.screen.blit(proc_text, proc_rect)
+        
+        # Timer configuration display
+        config_y = 420
+        config_text = self.font_small.render(f"Config: Char={self.character_timeout}s, Word={self.word_timeout}s", True, self.WHITE)
+        config_rect = config_text.get_rect(center=(self.screen.get_width()//2, config_y))
+        self.screen.blit(config_text, config_rect)
+        
+        # Instructions (moved down)
         instructions = [
             "Left Click: Dot (.)",
             "Left Long Press: Dash (-)",
-            "1.5s Pause: Complete Character",
-            "3s Pause: Next Word",
+            "2.5s Pause: Complete Character",
+            "5s Pause: Next Word",
             "Right Click: Complete Message",
             "Double Right Click: Reset",
             "ESC: Exit"
         ]
         
-        y_offset = self.screen.get_height() - 200
+        y_offset = self.screen.get_height() - 220
         for instruction in instructions:
             inst_text = self.font_small.render(instruction, True, self.WHITE)
             inst_rect = inst_text.get_rect(center=(self.screen.get_width()//2, y_offset))
             self.screen.blit(inst_text, inst_rect)
-            y_offset += 30
+            y_offset += 25
         
         pygame.display.flip()
 
     def play_beep(self, frequency=800, duration=0.1):
         """Play a beep sound"""
         try:
-            # Generate a simple beep
-            sample_rate = 22050
-            frames = int(duration * sample_rate)
-            arr = []
-            for i in range(frames):
-                wave = 4096 * (i % (sample_rate // frequency) < (sample_rate // frequency) // 2)
-                arr.append([wave, wave])
-            
-            sound = pygame.sndarray.make_sound(pygame.array.array('i', arr))
-            sound.play()
-            time.sleep(duration)
+            # Try to use numpy for better audio generation
+            try:
+                import numpy as np
+                sample_rate = 22050
+                frames = int(duration * sample_rate)
+                
+                # Create sine wave
+                arr = np.sin(2 * np.pi * frequency * np.linspace(0, duration, frames))
+                arr = (arr * 32767).astype(np.int16)
+                
+                # Convert to stereo
+                stereo_arr = np.zeros((frames, 2), dtype=np.int16)
+                stereo_arr[:, 0] = arr
+                stereo_arr[:, 1] = arr
+                
+                sound = pygame.sndarray.make_sound(stereo_arr)
+                sound.play()
+                time.sleep(duration)
+            except ImportError:
+                # Fallback without numpy
+                sample_rate = 22050
+                frames = int(duration * sample_rate)
+                
+                # Simple square wave generation
+                arr = []
+                for i in range(frames):
+                    # Generate square wave
+                    cycle_length = sample_rate // frequency
+                    if (i % cycle_length) < (cycle_length // 2):
+                        sample = 16384  # Half volume
+                    else:
+                        sample = -16384
+                    arr.append([sample, sample])
+                
+                # Convert to pygame sound
+                import array
+                sound_array = array.array('h', [item for sublist in arr for item in sublist])
+                sound = pygame.sndarray.make_sound(sound_array.reshape((-1, 2)))
+                sound.play()
+                time.sleep(duration)
+                
         except Exception as e:
             print(f"Audio error: {e}")
+            # Fallback: just print beep
+            print(f"BEEP: {frequency}Hz for {duration}s")
     
     def display_character(self, char, color='green'):
         """Display a character on the Sense HAT"""
         if self.sense_available:
             try:
                 self.sense.show_letter(char, text_colour=self.colors[color])
-                time.sleep(1)
+                # Don't sleep here - it blocks the main thread and causes duplicate processing
+                # time.sleep(1)  # Removed to prevent threading issues
             except Exception as e:
                 print(f"⚠ Sense HAT display error: {e}")
         else:
@@ -265,11 +368,18 @@ class MorseCodeSystem:
     def process_morse_character(self):
         """Convert current morse code to character and display it"""
         if not self.current_morse:
+            print("DEBUG: process_morse_character called but no morse to process")
             return
             
-        char = self.morse_dict.get(self.current_morse, '?')
+        # Prevent duplicate processing by clearing morse immediately
+        morse_to_process = self.current_morse
+        self.current_morse = ""
         
-        print(f"Morse: {self.current_morse} -> Character: {char}")
+        print(f"DEBUG: Processing morse '{morse_to_process}' (cleared current_morse)")
+        
+        char = self.morse_dict.get(morse_to_process, '?')
+        
+        print(f"Character completed: {morse_to_process} -> {char}")
         
         # Display character on Sense HAT
         self.display_character(char)
@@ -282,12 +392,10 @@ class MorseCodeSystem:
         
         # Add to current message
         self.current_message += char
+        print(f"Current message: '{self.current_message}'")
         
-        # Clear current morse
-        self.current_morse = ""
-        
-        # Keep last_input_time for word timeout, but mark character as processed
-        # Don't reset last_input_time here - let word timeout handle it
+        # DON'T reset last_input_time here - keep it for word timeout
+        # The word timeout will handle resetting when appropriate
         
         # Update display
         self.update_display()
@@ -403,25 +511,30 @@ class MorseCodeSystem:
                 
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:  # Left button
-                # End of press
+                # End of press - this is when we actually register the input
                 press_duration = current_time - self.press_start_time
+                
+                print(f"DEBUG: Mouse button UP detected, press duration: {press_duration:.2f}s")
                 
                 if press_duration >= self.long_press_threshold:
                     # Long press = dash
                     self.current_morse += "-"
-                    print(f"Dash (-) - Current: {self.current_morse}")
+                    print(f"Dash (-) after {press_duration:.2f}s press - Current: {self.current_morse}")
                     self.play_beep(frequency=600, duration=0.3)
                 else:
                     # Short press = dot
                     self.current_morse += "."
-                    print(f"Dot (.) - Current: {self.current_morse}")
+                    print(f"Dot (.) after {press_duration:.2f}s press - Current: {self.current_morse}")
                     self.play_beep(frequency=800, duration=0.1)
                 
                 # Display current morse pattern
                 self.display_morse_pattern(self.current_morse)
                 
-                # Update last input time
+                # Update last input time to NOW (when button was released)
+                # This starts the character timeout from the button release, not press
+                old_time = self.last_input_time
                 self.last_input_time = current_time
+                print(f"DEBUG: Input timing reset from {old_time} to {current_time}, character timeout will start from button release")
                 
                 # Update display
                 self.update_display()
@@ -454,29 +567,30 @@ class MorseCodeSystem:
         while self.running:
             current_time = time.time()
             
-            if self.last_input_time > 0:
+            if self.last_input_time > 0 and not self.processing_character:
                 time_since_input = current_time - self.last_input_time
                 
-                # Check for character timeout (1.5 seconds) - only if we have morse input
+                # Check for character timeout - simple logic without debounce
                 if (time_since_input >= self.character_timeout and 
                     self.current_morse and 
                     time_since_input < self.word_timeout):
                     
-                    print(f"Character timeout reached - processing: {self.current_morse}")
-                    # Process current character (this will reset last_input_time)
+                    print(f"DEBUG: Character timeout triggered - time_since_input={time_since_input:.1f}s, current_morse='{self.current_morse}'")
+                    # Set flag to prevent duplicate processing
+                    self.processing_character = True
                     self.process_morse_character()
+                    self.processing_character = False
                 
-                # Check for word timeout (3 seconds) - only if we have a current message
+                # Check for word timeout - only if we have a current message and no pending morse
                 elif (time_since_input >= self.word_timeout and 
                       self.current_message and
-                      not self.current_morse):  # Only if no pending morse character
+                      not self.current_morse):
                     
-                    print(f"Word timeout reached - completing word: {self.current_message}")
-                    # Process word break
+                    print(f"DEBUG: Word timeout triggered - time_since_input={time_since_input:.1f}s, current_message='{self.current_message}'")
                     self.process_word_break()
-                    
-                    # Reset timeout
+                    # Reset timeout after word completion
                     self.last_input_time = 0
+                    print(f"DEBUG: Reset last_input_time to 0 after word completion")
             
             time.sleep(0.1)
     
@@ -516,8 +630,8 @@ class MorseCodeSystem:
                     elif event.type in [pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP]:
                         self.handle_mouse_event(event)
                 
-                # Update display
-                self.update_display()
+                # Update display (thread-safe)
+                self._do_display_update()
                 clock.tick(60)  # 60 FPS
                 
         except Exception as e:

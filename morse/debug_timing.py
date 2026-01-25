@@ -13,6 +13,7 @@ class TimingTest:
         self.last_input_time = 0
         self.character_timeout = 1.5
         self.word_timeout = 3.0
+        self.input_debounce = 0.3  # 300ms debounce period
         
         self.morse_dict = {
             '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
@@ -60,7 +61,7 @@ class TimingTest:
         current_time = time.time()
         time_since_input = current_time - self.last_input_time
         
-        if (time_since_input >= self.character_timeout and 
+        if (time_since_input >= (self.input_debounce + self.character_timeout) and 
             self.current_morse and 
             time_since_input < self.word_timeout):
             print(f"CHARACTER TIMEOUT ({time_since_input:.1f}s)")
