@@ -149,6 +149,9 @@ class MorseCodeSystem:
         self.both_buttons_start_time = 0
         self.exit_hold_duration = 5.0  # 5 seconds to exit
         
+        # Flag to interrupt ongoing LED messages
+        self.interrupt_led_message = False
+        
         # Threading
         self.running = True
         self.input_thread = None
@@ -293,13 +296,37 @@ class MorseCodeSystem:
         """Display a character on the Sense HAT"""
         if self.sense_available:
             try:
+                self.sense.set_rotation(270)
                 self.sense.show_letter(char, text_colour=self.colors[color])
-                # Don't sleep here - it blocks the main thread and causes duplicate processing
-                # time.sleep(1)  # Removed to prevent threading issues
             except Exception as e:
                 print(f"⚠ Sense HAT display error: {e}")
         else:
             print(f"Character displayed: {char} (Sense HAT not available)")
+    
+    def show_led_message(self, text, text_colour, back_colour=None, scroll_speed=0.1):
+        """Display a scrolling message on LED with interrupt support"""
+        if not self.sense_available:
+            print(f"LED message: {text} (Sense HAT not available)")
+            return
+        
+        try:
+            # Set rotation first, then clear to ensure consistent orientation
+            self.sense.set_rotation(270)
+            self.sense.clear()
+            
+            if back_colour is None:
+                back_colour = self.colors['black']
+            
+            # Use show_message - unfortunately it's blocking, but we clear first
+            # to prevent overlap with previous messages
+            self.sense.show_message(
+                text,
+                text_colour=text_colour,
+                back_colour=back_colour,
+                scroll_speed=scroll_speed
+            )
+        except Exception as e:
+            print(f"⚠ Sense HAT message display error: {e}")
     
     def display_morse_pattern(self, morse_code):
         """Display morse code pattern on LED matrix"""
@@ -308,6 +335,7 @@ class MorseCodeSystem:
             return
             
         try:
+            self.sense.set_rotation(270)
             self.sense.clear()
             
             # Display dots and dashes as patterns
@@ -377,15 +405,11 @@ class MorseCodeSystem:
             print(f"Word completed: '{self.current_message}'")
             
             # Display word completion
-            if self.sense_available:
-                try:
-                    self.sense.show_message(
-                        f"WORD: {self.current_message}",
-                        text_colour=self.colors['blue'],
-                        scroll_speed=0.08
-                    )
-                except Exception as e:
-                    print(f"⚠ Sense HAT word display error: {e}")
+            self.show_led_message(
+                f"WORD: {self.current_message}",
+                text_colour=self.colors['blue'],
+                scroll_speed=0.08
+            )
             
             self.current_message = ""
             
@@ -411,16 +435,12 @@ class MorseCodeSystem:
         print(f"\nComplete message: '{complete_msg}'")
         
         # Display complete message on Sense HAT
-        if self.sense_available:
-            try:
-                self.sense.show_message(
-                    f"MSG: {complete_msg}",
-                    text_colour=self.colors['green'],
-                    back_colour=self.colors['black'],
-                    scroll_speed=0.1
-                )
-            except Exception as e:
-                print(f"⚠ Sense HAT message display error: {e}")
+        self.show_led_message(
+            f"MSG: {complete_msg}",
+            text_colour=self.colors['green'],
+            back_colour=self.colors['black'],
+            scroll_speed=0.1
+        )
         
         # Read out the message
         if self.tts_available:
@@ -449,20 +469,12 @@ class MorseCodeSystem:
         self.current_message = ""
         self.words = []
         
-        # Clear display
-        if self.sense_available:
-            try:
-                self.sense.set_rotation(270)  # 90 degrees anti-clockwise
-                self.sense.clear()
-                
-                # Show ready indicator
-                self.sense.show_message(
-                    "READY",
-                    text_colour=self.colors['white'],
-                    scroll_speed=0.1
-                )
-            except Exception as e:
-                print(f"⚠ Sense HAT reset display error: {e}")
+        # Clear display and show ready indicator
+        self.show_led_message(
+            "READY",
+            text_colour=self.colors['white'],
+            scroll_speed=0.1
+        )
         
         # Play reset sound
         self.play_beep(frequency=600, duration=0.3)
@@ -618,15 +630,11 @@ class MorseCodeSystem:
         print("Starting Morse Code System...")
         
         # Show startup message
-        if self.sense_available:
-            try:
-                self.sense.show_message(
-                    "MORSE READY",
-                    text_colour=self.colors['green'],
-                    scroll_speed=0.1
-                )
-            except Exception as e:
-                print(f"⚠ Sense HAT startup display error: {e}")
+        self.show_led_message(
+            "MORSE READY",
+            text_colour=self.colors['green'],
+            scroll_speed=0.1
+        )
         
         # Start timeout monitor thread
         self.timeout_thread = threading.Thread(target=self.timeout_monitor, daemon=True)
