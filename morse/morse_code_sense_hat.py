@@ -518,9 +518,12 @@ class MorseCodeSystem:
         if self.current_morse:
             self.process_morse_character()
         
-        # Add current message to words if exists
+        # Add current message to words if exists and not already added
         if self.current_message:
-            self.words.append(self.current_message)
+            # Avoid duplicate if word was already added by word timeout
+            if not self.words or self.words[-1] != self.current_message:
+                self.words.append(self.current_message)
+            self.current_message = ""
         
         if not self.words:
             print("No message to complete")
@@ -552,9 +555,9 @@ class MorseCodeSystem:
             # Try fallback espeak command
             self.speak_with_espeak(f"Message complete: {complete_msg}")
         
-        # Play achievement tune after message completion
-        self.play_achievement_tune()
-        # Alternative: self.play_mario_tune()
+        # Play Mario tune after message completion
+        self.play_mario_tune()
+        # Alternative: self.play_achievement_tune()
     
     def reset_system(self):
         """Reset the system for next message"""
