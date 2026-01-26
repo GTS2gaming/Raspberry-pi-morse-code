@@ -151,12 +151,14 @@ class MorseCodeSystem:
         
         # Flag to interrupt ongoing LED messages
         self.interrupt_led_message = False
+        self.led_displaying = False  # Track if LED is currently showing a message
         
         # Threading
         self.running = True
         self.input_thread = None
         self.timeout_thread = None
         self.input_lock = threading.Lock()  # Lock to prevent race conditions
+        self.led_lock = threading.Lock()  # Lock to prevent LED display conflicts
         
         print("Morse Code System initialized!")
         print("Controls:")
@@ -293,27 +295,48 @@ class MorseCodeSystem:
             print(f"BEEP: {frequency}Hz for {duration}s")
     
     def play_mario_tune(self):
-        """Play Mario theme tune for ~5 seconds"""
+        """Play Mario theme tune for ~3 seconds (backup tune)"""
         # Mario theme notes: (frequency in Hz, duration in seconds)
-        # Based on the iconic Super Mario Bros theme
+        # Shortened version of Super Mario Bros theme
         mario_notes = [
             # Main theme opening
-            (660, 0.15), (660, 0.15), (0, 0.15), (660, 0.15), (0, 0.15), (520, 0.15), (660, 0.15), (0, 0.15),
-            (784, 0.3), (0, 0.3), (392, 0.3), (0, 0.15),
-            # Second phrase
-            (520, 0.2), (0, 0.1), (392, 0.2), (0, 0.1), (330, 0.2), (0, 0.1),
-            (440, 0.15), (0, 0.05), (494, 0.15), (0, 0.1), (466, 0.1), (440, 0.2), (0, 0.1),
-            # Third phrase
-            (392, 0.15), (660, 0.15), (784, 0.15), (880, 0.2), (0, 0.1),
-            (698, 0.15), (784, 0.15), (0, 0.1), (660, 0.2), (0, 0.1),
-            (520, 0.15), (587, 0.15), (494, 0.15), (0, 0.2),
+            (660, 0.12), (660, 0.12), (0, 0.12), (660, 0.12), (0, 0.12), (520, 0.12), (660, 0.12), (0, 0.12),
+            (784, 0.25), (0, 0.2), (392, 0.25), (0, 0.1),
+            # Second phrase (shortened)
+            (520, 0.15), (0, 0.08), (392, 0.15), (0, 0.08), (330, 0.15), (0, 0.08),
+            (440, 0.12), (494, 0.12), (440, 0.15),
         ]
-        
+        self._play_tune(mario_notes, "Mario tune")
+    
+    def play_achievement_tune(self):
+        """Play achievement/success fanfare tune for ~3 seconds"""
+        # Achievement fanfare notes: (frequency in Hz, duration in seconds)
+        # Triumphant ascending pattern
+        achievement_notes = [
+            # Opening fanfare
+            (523, 0.15), (0, 0.05),  # C5
+            (659, 0.15), (0, 0.05),  # E5
+            (784, 0.15), (0, 0.05),  # G5
+            (1047, 0.3), (0, 0.1),   # C6 (hold)
+            # Triumphant resolution
+            (784, 0.1), (0, 0.05),   # G5
+            (880, 0.1), (0, 0.05),   # A5
+            (988, 0.1), (0, 0.05),   # B5
+            (1047, 0.4), (0, 0.15),  # C6 (longer hold)
+            # Final flourish
+            (1319, 0.12), (1175, 0.12), (1047, 0.12),  # E6, D6, C6
+            (0, 0.1),
+            (1047, 0.2), (1319, 0.2), (1568, 0.35),  # C6, E6, G6 (final chord arpeggio)
+        ]
+        self._play_tune(achievement_notes, "Achievement tune")
+    
+    def _play_tune(self, notes, tune_name="tune"):
+        """Internal method to play a sequence of notes"""
         try:
             import numpy as np
             sample_rate = 22050
             
-            for freq, duration in mario_notes:
+            for freq, duration in notes:
                 if freq == 0:
                     # Rest/silence
                     time.sleep(duration)
@@ -344,26 +367,27 @@ class MorseCodeSystem:
                     sound.play()
                     time.sleep(duration)
                     
-            print("✓ Mario tune played")
+            print(f"✓ {tune_name} played")
         except ImportError:
             # Fallback: play simple completion beeps if numpy not available
-            print("⚠ Numpy not available for Mario tune, playing simple beeps")
+            print(f"⚠ Numpy not available for {tune_name}, playing simple beeps")
             for _ in range(5):
                 self.play_beep(frequency=800, duration=0.2)
                 time.sleep(0.1)
                 self.play_beep(frequency=1000, duration=0.2)
                 time.sleep(0.1)
         except Exception as e:
-            print(f"⚠ Mario tune error: {e}")
+            print(f"⚠ {tune_name} error: {e}")
     
     def display_character(self, char, color='green'):
         """Display a character on the Sense HAT"""
         if self.sense_available:
-            try:
-                self.sense.set_rotation(270)
-                self.sense.show_letter(char, text_colour=self.colors[color])
-            except Exception as e:
-                print(f"⚠ Sense HAT display error: {e}")
+            with self.led_lock:
+                try:
+                    self.sense.set_rotation(270)
+                    self.sense.show_letter(char, text_colour=self.colors[color])
+                except Exception as e:
+                    print(f"⚠ Sense HAT display error: {e}")
         else:
             print(f"Character displayed: {char} (Sense HAT not available)")
     
@@ -373,58 +397,66 @@ class MorseCodeSystem:
             print(f"LED message: {text} (Sense HAT not available)")
             return
         
-        try:
-            # Set rotation first, then clear to ensure consistent orientation
-            self.sense.set_rotation(270)
-            self.sense.clear()
-            
-            if back_colour is None:
-                back_colour = self.colors['black']
-            
-            # Use show_message - unfortunately it's blocking, but we clear first
-            # to prevent overlap with previous messages
-            self.sense.show_message(
-                text,
-                text_colour=text_colour,
-                back_colour=back_colour,
-                scroll_speed=scroll_speed
-            )
-        except Exception as e:
-            print(f"⚠ Sense HAT message display error: {e}")
+        # Use lock to prevent concurrent LED access
+        with self.led_lock:
+            try:
+                self.led_displaying = True
+                
+                # Set rotation first, then clear to ensure consistent orientation
+                self.sense.set_rotation(270)
+                self.sense.clear()
+                
+                if back_colour is None:
+                    back_colour = self.colors['black']
+                
+                # Use show_message - unfortunately it's blocking, but we clear first
+                # to prevent overlap with previous messages
+                self.sense.show_message(
+                    text,
+                    text_colour=text_colour,
+                    back_colour=back_colour,
+                    scroll_speed=scroll_speed
+                )
+                
+                self.led_displaying = False
+            except Exception as e:
+                self.led_displaying = False
+                print(f"⚠ Sense HAT message display error: {e}")
     
     def display_morse_pattern(self, morse_code):
         """Display morse code pattern on LED matrix"""
         if not self.sense_available:
             print(f"Morse pattern: {morse_code} (Sense HAT not available)")
             return
-            
-        try:
-            self.sense.set_rotation(270)
-            self.sense.clear()
-            
-            # Display dots and dashes as patterns
-            row = 3  # Middle row
-            col = 0
-            
-            for symbol in morse_code:
-                if col >= 8:
-                    break
-                    
-                if symbol == '.':
-                    # Single pixel for dot
-                    self.sense.set_pixel(col, row, self.colors['yellow'])
-                    col += 1
-                elif symbol == '-':
-                    # Three pixels for dash
-                    for i in range(min(3, 8 - col)):
-                        self.sense.set_pixel(col + i, row, self.colors['orange'])
-                    col += 3
+        
+        with self.led_lock:
+            try:
+                self.sense.set_rotation(270)
+                self.sense.clear()
                 
-                col += 1  # Space between symbols
-            
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"⚠ Sense HAT pattern display error: {e}")
+                # Display dots and dashes as patterns
+                row = 3  # Middle row
+                col = 0
+                
+                for symbol in morse_code:
+                    if col >= 8:
+                        break
+                        
+                    if symbol == '.':
+                        # Single pixel for dot
+                        self.sense.set_pixel(col, row, self.colors['yellow'])
+                        col += 1
+                    elif symbol == '-':
+                        # Three pixels for dash
+                        for i in range(min(3, 8 - col)):
+                            self.sense.set_pixel(col + i, row, self.colors['orange'])
+                        col += 3
+                    
+                    col += 1  # Space between symbols
+                
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"⚠ Sense HAT pattern display error: {e}")
     
     def process_morse_character(self):
         """Convert current morse code to character and display it"""
@@ -520,8 +552,9 @@ class MorseCodeSystem:
             # Try fallback espeak command
             self.speak_with_espeak(f"Message complete: {complete_msg}")
         
-        # Play Mario tune after message completion
-        self.play_mario_tune()
+        # Play achievement tune after message completion
+        self.play_achievement_tune()
+        # Alternative: self.play_mario_tune()
     
     def reset_system(self):
         """Reset the system for next message"""
@@ -651,6 +684,11 @@ class MorseCodeSystem:
         """Monitor for timeouts (character completion and word breaks)"""
         while self.running:
             current_time = time.time()
+            
+            # Skip timeout processing if LED is currently displaying a message
+            if self.led_displaying:
+                time.sleep(0.1)
+                continue
             
             if self.last_input_time > 0 and not self.processing_character:
                 time_since_input = current_time - self.last_input_time
