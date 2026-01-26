@@ -292,6 +292,70 @@ class MorseCodeSystem:
             # Fallback: just print beep
             print(f"BEEP: {frequency}Hz for {duration}s")
     
+    def play_mario_tune(self):
+        """Play Mario theme tune for ~5 seconds"""
+        # Mario theme notes: (frequency in Hz, duration in seconds)
+        # Based on the iconic Super Mario Bros theme
+        mario_notes = [
+            # Main theme opening
+            (660, 0.15), (660, 0.15), (0, 0.15), (660, 0.15), (0, 0.15), (520, 0.15), (660, 0.15), (0, 0.15),
+            (784, 0.3), (0, 0.3), (392, 0.3), (0, 0.15),
+            # Second phrase
+            (520, 0.2), (0, 0.1), (392, 0.2), (0, 0.1), (330, 0.2), (0, 0.1),
+            (440, 0.15), (0, 0.05), (494, 0.15), (0, 0.1), (466, 0.1), (440, 0.2), (0, 0.1),
+            # Third phrase
+            (392, 0.15), (660, 0.15), (784, 0.15), (880, 0.2), (0, 0.1),
+            (698, 0.15), (784, 0.15), (0, 0.1), (660, 0.2), (0, 0.1),
+            (520, 0.15), (587, 0.15), (494, 0.15), (0, 0.2),
+        ]
+        
+        try:
+            import numpy as np
+            sample_rate = 22050
+            
+            for freq, duration in mario_notes:
+                if freq == 0:
+                    # Rest/silence
+                    time.sleep(duration)
+                else:
+                    frames = int(duration * sample_rate)
+                    
+                    # Create sine wave with envelope for smoother sound
+                    t = np.linspace(0, duration, frames)
+                    arr = np.sin(2 * np.pi * freq * t)
+                    
+                    # Apply simple envelope (attack/decay)
+                    envelope = np.ones(frames)
+                    attack = int(0.01 * sample_rate)
+                    decay = int(0.05 * sample_rate)
+                    if attack < frames:
+                        envelope[:attack] = np.linspace(0, 1, attack)
+                    if decay < frames:
+                        envelope[-decay:] = np.linspace(1, 0, decay)
+                    
+                    arr = (arr * envelope * 32767).astype(np.int16)
+                    
+                    # Convert to stereo
+                    stereo_arr = np.zeros((frames, 2), dtype=np.int16)
+                    stereo_arr[:, 0] = arr
+                    stereo_arr[:, 1] = arr
+                    
+                    sound = pygame.sndarray.make_sound(stereo_arr)
+                    sound.play()
+                    time.sleep(duration)
+                    
+            print("✓ Mario tune played")
+        except ImportError:
+            # Fallback: play simple completion beeps if numpy not available
+            print("⚠ Numpy not available for Mario tune, playing simple beeps")
+            for _ in range(5):
+                self.play_beep(frequency=800, duration=0.2)
+                time.sleep(0.1)
+                self.play_beep(frequency=1000, duration=0.2)
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"⚠ Mario tune error: {e}")
+    
     def display_character(self, char, color='green'):
         """Display a character on the Sense HAT"""
         if self.sense_available:
@@ -456,10 +520,8 @@ class MorseCodeSystem:
             # Try fallback espeak command
             self.speak_with_espeak(f"Message complete: {complete_msg}")
         
-        # Play completion sound
-        for _ in range(3):
-            self.play_beep(frequency=1200, duration=0.2)
-            time.sleep(0.1)
+        # Play Mario tune after message completion
+        self.play_mario_tune()
     
     def reset_system(self):
         """Reset the system for next message"""
