@@ -142,6 +142,12 @@ class MorseCodeSystem:
         self.right_click_count = 0
         self.processing_character = False  # Flag to prevent duplicate processing
         
+        # Simultaneous button press tracking for exit
+        self.left_button_pressed = False
+        self.right_button_pressed = False
+        self.both_buttons_start_time = 0
+        self.exit_hold_duration = 5.0  # 5 seconds to exit
+        
         # Threading
         self.running = True
         self.input_thread = None
@@ -157,6 +163,7 @@ class MorseCodeSystem:
         print("- Right click: Complete message and read aloud")
         print("- Double right click: Reset")
         print("- ESC key: Exit fullscreen")
+        print("- Left + Right click (hold 5s): Exit fullscreen")
         
         # Initial screen update
         self.update_display()
@@ -219,6 +226,7 @@ class MorseCodeSystem:
             "3s Pause: Next Word",
             "Right Click: Complete Message",
             "Double Right Click: Reset",
+            "Left + Right (5s): Exit",
             "ESC: Exit"
         ]
         
@@ -460,64 +468,102 @@ class MorseCodeSystem:
         # Update display
         self.update_display()
     
+    def check_both_buttons_exit(self):
+        """Check if both buttons are held and track exit timing"""
+        current_time = time.time()
+        
+        if self.left_button_pressed and self.right_button_pressed:
+            if self.both_buttons_start_time == 0:
+                # Both buttons just became pressed together
+                self.both_buttons_start_time = current_time
+                print("Both buttons pressed - hold for 5 seconds to exit")
+            else:
+                # Check if held long enough
+                hold_duration = current_time - self.both_buttons_start_time
+                if hold_duration >= self.exit_hold_duration:
+                    print(f"Exit triggered after {hold_duration:.1f}s hold")
+                    self.running = False
+        else:
+            # Reset if either button is released
+            if self.both_buttons_start_time > 0:
+                hold_duration = time.time() - self.both_buttons_start_time
+                print(f"Both-button hold cancelled after {hold_duration:.1f}s")
+            self.both_buttons_start_time = 0
+    
     def handle_mouse_event(self, event):
         """Handle pygame mouse events"""
         current_time = time.time()
         
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left button
+                self.left_button_pressed = True
                 # Start of press
                 self.press_start_time = current_time
                 self.is_long_press = False
+            elif event.button == 3:  # Right button
+                self.right_button_pressed = True
+            
+            # Check for both-button exit
+            self.check_both_buttons_exit()
                 
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:  # Left button
-                # End of press - this is when we actually register the input
-                press_duration = current_time - self.press_start_time
-                
-                print(f"DEBUG: Mouse button UP detected, press duration: {press_duration:.2f}s")
-                
-                # Use lock to prevent race condition with timeout monitor
-                with self.input_lock:
-                    if press_duration >= self.long_press_threshold:
-                        # Long press = dash
-                        self.current_morse += "-"
-                        print(f"Dash (-) after {press_duration:.2f}s press - Current: {self.current_morse}")
-                        self.play_beep(frequency=600, duration=0.3)
-                    else:
-                        # Short press = dot
-                        self.current_morse += "."
-                        print(f"Dot (.) after {press_duration:.2f}s press - Current: {self.current_morse}")
-                        self.play_beep(frequency=800, duration=0.1)
+                # Only process morse input if not in both-button exit mode
+                if not (self.left_button_pressed and self.right_button_pressed and self.both_buttons_start_time > 0):
+                    # End of press - this is when we actually register the input
+                    press_duration = current_time - self.press_start_time
                     
-                    # Update last input time to NOW (when button was released)
-                    # This starts the character timeout from the button release, not press
-                    old_time = self.last_input_time
-                    self.last_input_time = current_time
-                    print(f"DEBUG: Input timing reset from {old_time} to {current_time}, character timeout will start from button release")
+                    print(f"DEBUG: Mouse button UP detected, press duration: {press_duration:.2f}s")
+                    
+                    # Use lock to prevent race condition with timeout monitor
+                    with self.input_lock:
+                        if press_duration >= self.long_press_threshold:
+                            # Long press = dash
+                            self.current_morse += "-"
+                            print(f"Dash (-) after {press_duration:.2f}s press - Current: {self.current_morse}")
+                            self.play_beep(frequency=600, duration=0.3)
+                        else:
+                            # Short press = dot
+                            self.current_morse += "."
+                            print(f"Dot (.) after {press_duration:.2f}s press - Current: {self.current_morse}")
+                            self.play_beep(frequency=800, duration=0.1)
+                        
+                        # Update last input time to NOW (when button was released)
+                        # This starts the character timeout from the button release, not press
+                        old_time = self.last_input_time
+                        self.last_input_time = current_time
+                        print(f"DEBUG: Input timing reset from {old_time} to {current_time}, character timeout will start from button release")
+                    
+                    # Display current morse pattern
+                    self.display_morse_pattern(self.current_morse)
+                    
+                    # Update display
+                    self.update_display()
                 
-                # Display current morse pattern
-                self.display_morse_pattern(self.current_morse)
-                
-                # Update display
-                self.update_display()
+                self.left_button_pressed = False
+                self.check_both_buttons_exit()
                 
             elif event.button == 3:  # Right button
-                # Handle right click for message completion or reset
-                time_since_last = current_time - self.last_right_click_time
+                # Only process right-click actions if not in both-button exit mode
+                if not (self.left_button_pressed and self.right_button_pressed and self.both_buttons_start_time > 0):
+                    # Handle right click for message completion or reset
+                    time_since_last = current_time - self.last_right_click_time
+                    
+                    if time_since_last <= self.double_click_threshold:
+                        # Double right click = reset
+                        self.right_click_count += 1
+                        if self.right_click_count >= 2:
+                            self.reset_system()
+                            self.right_click_count = 0
+                    else:
+                        # Single right click = complete message
+                        self.right_click_count = 1
+                        threading.Timer(self.double_click_threshold + 0.1, self.handle_single_right_click).start()
+                    
+                    self.last_right_click_time = current_time
                 
-                if time_since_last <= self.double_click_threshold:
-                    # Double right click = reset
-                    self.right_click_count += 1
-                    if self.right_click_count >= 2:
-                        self.reset_system()
-                        self.right_click_count = 0
-                else:
-                    # Single right click = complete message
-                    self.right_click_count = 1
-                    threading.Timer(self.double_click_threshold + 0.1, self.handle_single_right_click).start()
-                
-                self.last_right_click_time = current_time
+                self.right_button_pressed = False
+                self.check_both_buttons_exit()
     
     def handle_single_right_click(self):
         """Handle single right click after timeout"""
@@ -600,6 +646,10 @@ class MorseCodeSystem:
                             self.running = False
                     elif event.type in [pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP]:
                         self.handle_mouse_event(event)
+                
+                # Continuously check for both-button exit while buttons are held
+                if self.left_button_pressed and self.right_button_pressed:
+                    self.check_both_buttons_exit()
                 
                 # Update display (thread-safe)
                 self._do_display_update()
