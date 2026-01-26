@@ -38,6 +38,7 @@ class MorseCodeSystem:
         try:
             self.sense = SenseHat()
             self.sense.clear()
+            self.sense.set_rotation(0)  # Always use consistent rotation (0, 90, 180, or 270)
             self.sense_available = True
             print("✓ Sense HAT initialized successfully")
         except Exception as e:
@@ -451,6 +452,7 @@ class MorseCodeSystem:
         # Clear display
         if self.sense_available:
             try:
+                self.sense.set_rotation(0)  # Reset rotation to consistent direction
                 self.sense.clear()
                 
                 # Show ready indicator
