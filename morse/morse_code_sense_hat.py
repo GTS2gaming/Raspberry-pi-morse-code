@@ -3,11 +3,13 @@
 Morse Code Input System for Raspberry Pi with Sense HAT
 Features:
 - Mouse input for Morse code (left click = dot, long press = dash)
+- Keyboard input for text-to-morse conversion with audio playback
 - Real-time character display on Sense HAT
-- Audio feedback with speaker
+- Audio feedback with speaker/headphones
 - Auto-start at boot capability
 - Complete message display and text-to-speech
 - Reset functionality with double right-click
+- Toggle between mouse and keyboard modes with TAB
 
 Author: Kiro AI Assistant
 Compatible with Raspberry Pi OS
@@ -116,6 +118,9 @@ class MorseCodeSystem:
             '.--.-.': '@'
         }
         
+        # Reverse dictionary for text-to-morse conversion
+        self.text_to_morse = {v: k for k, v in self.morse_dict.items()}
+        
         # Colors for display
         self.colors = {
             'red': [255, 0, 0],
@@ -143,6 +148,10 @@ class MorseCodeSystem:
         self.right_click_count = 0
         self.processing_character = False  # Flag to prevent duplicate processing
         
+        # Keyboard input variables
+        self.keyboard_input = ""
+        self.keyboard_mode = False  # Toggle between mouse and keyboard mode
+        
         # Simultaneous button press tracking for exit
         self.left_button_pressed = False
         self.right_button_pressed = False
@@ -162,12 +171,18 @@ class MorseCodeSystem:
         
         print("Morse Code System initialized!")
         print("Controls:")
+        print("- TAB: Toggle between Mouse and Keyboard mode")
+        print("\nMouse Mode:")
         print("- Left click: Dot (.)")
         print("- Left long press (>200ms): Dash (-)")
         print("- 1.5 second pause: Complete character")
         print("- 3 second pause: Next word")
         print("- Right click: Complete message and read aloud")
         print("- Double right click: Reset")
+        print("\nKeyboard Mode:")
+        print("- Type text and press ENTER: Convert to morse code audio")
+        print("- BACKSPACE: Delete last character")
+        print("\nGeneral:")
         print("- ESC key: Exit fullscreen")
         print("- Left + Right click (hold 5s): Exit fullscreen")
         
@@ -199,44 +214,60 @@ class MorseCodeSystem:
         """Internal display update method"""
         self.screen.fill(self.BLACK)
         
-        # Title
-        title_text = self.font_large.render("Morse Code System", True, self.WHITE)
+        # Title with mode indicator
+        mode_text = "KEYBOARD" if self.keyboard_mode else "MOUSE"
+        title_text = self.font_large.render(f"Morse Code System - {mode_text} MODE", True, self.WHITE)
         title_rect = title_text.get_rect(center=(self.screen.get_width()//2, 80))
         self.screen.blit(title_text, title_rect)
+        
+        # Show keyboard input if in keyboard mode
+        if self.keyboard_mode and self.keyboard_input:
+            input_text = self.font_medium.render(f"Input: {self.keyboard_input}", True, self.YELLOW)
+            input_rect = input_text.get_rect(center=(self.screen.get_width()//2, 140))
+            self.screen.blit(input_text, input_rect)
         
         # Current morse code - larger font
         if self.current_morse:
             morse_font = pygame.font.Font(None, 120)
             morse_text = morse_font.render(f"{self.current_morse}", True, self.YELLOW)
-            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 180))
+            morse_rect = morse_text.get_rect(center=(self.screen.get_width()//2, 200))
             self.screen.blit(morse_text, morse_rect)
         
         # Current message - larger font
         if self.current_message:
             msg_font = pygame.font.Font(None, 96)
             msg_text = msg_font.render(f"{self.current_message}", True, self.GREEN)
-            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 280))
+            msg_rect = msg_text.get_rect(center=(self.screen.get_width()//2, 300))
             self.screen.blit(msg_text, msg_rect)
         
         # Complete words
         if self.words:
             words_text = self.font_medium.render(f"Words: {' '.join(self.words)}", True, self.BLUE)
-            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 360))
+            words_rect = words_text.get_rect(center=(self.screen.get_width()//2, 380))
             self.screen.blit(words_text, words_rect)
         
-        # Instructions
-        instructions = [
-            "Left Click: Dot (.)",
-            "Left Long Press: Dash (-)",
-            "1.5s Pause: Complete Character",
-            "3s Pause: Next Word",
-            "Right Click: Complete Message",
-            "Double Right Click: Reset",
-            "Left + Right (5s): Exit",
-            "ESC: Exit"
-        ]
+        # Instructions based on mode
+        if self.keyboard_mode:
+            instructions = [
+                "TAB: Switch to Mouse Mode",
+                "Type text and press ENTER: Convert to morse",
+                "BACKSPACE: Delete last character",
+                "ESC: Exit"
+            ]
+        else:
+            instructions = [
+                "TAB: Switch to Keyboard Mode",
+                "Left Click: Dot (.)",
+                "Left Long Press: Dash (-)",
+                "1.5s Pause: Complete Character",
+                "3s Pause: Next Word",
+                "Right Click: Complete Message",
+                "Double Right Click: Reset",
+                "Left + Right (5s): Exit",
+                "ESC: Exit"
+            ]
         
-        y_offset = self.screen.get_height() - 220
+        y_offset = self.screen.get_height() - (len(instructions) * 25 + 20)
         for instruction in instructions:
             inst_text = self.font_small.render(instruction, True, self.WHITE)
             inst_rect = inst_text.get_rect(center=(self.screen.get_width()//2, y_offset))
@@ -293,6 +324,119 @@ class MorseCodeSystem:
             print(f"Audio error: {e}")
             # Fallback: just print beep
             print(f"BEEP: {frequency}Hz for {duration}s")
+    
+    def play_morse_audio(self, morse_code):
+        """Play morse code as audio (dots and dashes)"""
+        dot_duration = 0.15  # 150ms for dot (slower)
+        dash_duration = 0.45  # 450ms for dash (slower)
+        symbol_gap = 0.15  # 150ms gap between symbols (slower)
+        
+        for symbol in morse_code:
+            if symbol == '.':
+                self.play_beep(frequency=800, duration=dot_duration)
+            elif symbol == '-':
+                self.play_beep(frequency=600, duration=dash_duration)
+            
+            # Gap between symbols
+            time.sleep(symbol_gap)
+    
+    def text_to_morse_audio(self, text):
+        """Convert text to morse code and play as audio"""
+        text = text.upper().strip()
+        if not text:
+            return
+        
+        print(f"Converting text to morse audio: '{text}'")
+        
+        # Display the text being converted
+        self.show_led_message(
+            f"PLAYING: {text}",
+            text_colour=self.colors['blue'],
+            scroll_speed=0.08
+        )
+        
+        # Convert each character and play
+        for i, char in enumerate(text):
+            if char == ' ':
+                # Word space - longer pause
+                print("  [WORD SPACE]")
+                time.sleep(1.0)  # 1000ms for word space (slower)
+                continue
+            
+            morse_code = self.text_to_morse.get(char, None)
+            if morse_code:
+                print(f"  {char} -> {morse_code}")
+                
+                # Display character on Sense HAT
+                self.display_character(char, 'green')
+                
+                # Play morse audio
+                self.play_morse_audio(morse_code)
+                
+                # Character space (gap between letters)
+                if i < len(text) - 1 and text[i + 1] != ' ':
+                    time.sleep(0.5)  # 500ms gap between characters (slower)
+            else:
+                print(f"  {char} -> [UNKNOWN CHARACTER]")
+                # Play error sound for unknown characters
+                self.play_beep(frequency=400, duration=0.2)
+                time.sleep(0.2)
+        
+        # Show completion message (no sound effect)
+        self.show_led_message(
+            "COMPLETE",
+            text_colour=self.colors['green'],
+            scroll_speed=0.1
+        )
+        
+        print(f"✓ Text-to-morse audio conversion complete")
+    
+    def handle_keyboard_input(self, event):
+        """Handle keyboard input for text-to-morse conversion"""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN:
+                # Convert typed text to morse audio
+                if self.keyboard_input.strip():
+                    # Run in separate thread to avoid blocking
+                    threading.Thread(
+                        target=self.text_to_morse_audio, 
+                        args=(self.keyboard_input,), 
+                        daemon=True
+                    ).start()
+                    self.keyboard_input = ""
+                    
+            elif event.key == pygame.K_BACKSPACE:
+                # Delete last character
+                if self.keyboard_input:
+                    self.keyboard_input = self.keyboard_input[:-1]
+                    
+            elif event.key == pygame.K_TAB:
+                # Toggle between mouse and keyboard mode
+                self.keyboard_mode = not self.keyboard_mode
+                mode_name = "KEYBOARD" if self.keyboard_mode else "MOUSE"
+                print(f"Switched to {mode_name} mode")
+                
+                # Clear keyboard input when switching modes
+                if not self.keyboard_mode:
+                    self.keyboard_input = ""
+                
+                # Show mode change on LED
+                self.show_led_message(
+                    f"{mode_name} MODE",
+                    text_colour=self.colors['white'],
+                    scroll_speed=0.1
+                )
+                
+            else:
+                # Add character to input (only printable characters)
+                if self.keyboard_mode and event.unicode and event.unicode.isprintable():
+                    self.keyboard_input += event.unicode.upper()
+                    # Limit input length to prevent display issues
+                    if len(self.keyboard_input) > 50:
+                        self.keyboard_input = self.keyboard_input[-50:]
+        
+        # Update display after keyboard input
+        self.update_display()
     
     def play_mario_tune(self):
         """Play Mario theme tune for ~3 seconds (backup tune)"""
@@ -566,6 +710,7 @@ class MorseCodeSystem:
         self.current_morse = ""
         self.current_message = ""
         self.words = []
+        self.keyboard_input = ""  # Clear keyboard input too
         
         # Clear display and show ready indicator
         self.show_led_message(
@@ -734,7 +879,7 @@ class MorseCodeSystem:
         
         # Show startup message
         self.show_led_message(
-            "MORSE READY",
+            "MORSE READY - TAB TO SWITCH MODES",
             text_colour=self.colors['green'],
             scroll_speed=0.1
         )
@@ -757,8 +902,13 @@ class MorseCodeSystem:
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             self.running = False
+                        else:
+                            # Handle keyboard input for text-to-morse
+                            self.handle_keyboard_input(event)
                     elif event.type in [pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP]:
-                        self.handle_mouse_event(event)
+                        # Only handle mouse events in mouse mode
+                        if not self.keyboard_mode:
+                            self.handle_mouse_event(event)
                 
                 # Continuously check for both-button exit while buttons are held
                 if self.left_button_pressed and self.right_button_pressed:
