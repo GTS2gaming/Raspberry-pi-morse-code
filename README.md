@@ -13,6 +13,8 @@ A fun and educational Morse code input system that runs on Raspberry Pi with Sen
 - Auto-start at boot capability
 - Multiple exit options (ESC key or hold both mouse buttons for 5 seconds)
 
+## Demo Video: https://youtube.com/shorts/ZdcvvNTYktU
+
 ## Hardware Requirements
 
 - Raspberry Pi (3, 4, or 5)
